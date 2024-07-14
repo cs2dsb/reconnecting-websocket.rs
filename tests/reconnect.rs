@@ -1,14 +1,14 @@
+use cfg_if::cfg_if;
 use futures::{select, FutureExt, StreamExt};
 use gloo::timers::future::TimeoutFuture;
-use reconnecting_websocket::{Socket, SocketBuilder};
 #[cfg(feature = "state-events")]
 use reconnecting_websocket::Event;
-use cfg_if::cfg_if;
+use reconnecting_websocket::{Socket, SocketBuilder};
 
 #[path = "./common.rs"]
 mod common;
 
-use common::{Input, Output, configure_tracing_once, ECHO_SERVER};
+use common::{configure_tracing_once, Input, Output, ECHO_SERVER};
 use tracing::{error, info};
 
 #[cfg(all(test, target_arch = "wasm32"))]
@@ -22,7 +22,7 @@ async fn reconnect() {
     use tracing::trace;
 
     const SEND_COUNT: usize = 10;
-    
+
     configure_tracing_once();
 
     async fn send_messages(socket: &mut Socket<Input, Output>, count: usize) {
@@ -72,10 +72,8 @@ async fn reconnect() {
             }
         }
     }
-    
 
-    let mut socket =
-        SocketBuilder::<Input, Output>::new(ECHO_SERVER.to_string()).open().unwrap();
+    let mut socket = SocketBuilder::<Input, Output>::new(ECHO_SERVER.to_string()).open().unwrap();
 
     info!("First test (before reconnect)");
     send_messages(&mut socket, SEND_COUNT).await;
@@ -85,6 +83,6 @@ async fn reconnect() {
 
     info!("Second test (after reconnect)");
     send_messages(&mut socket, SEND_COUNT).await;
-    
+
     info!("All done");
 }

@@ -1,7 +1,7 @@
 use gloo::net::websocket::State as GlooState;
 
 /// The state of the websocket.
-/// 
+///
 /// Copied from [`State`] to add [`PartialEq`]
 ///
 /// See [`WebSocket.readyState` on MDN](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState)

@@ -20,8 +20,8 @@ use gloo::{
 };
 
 use crate::{
-    State, debug, error, event::map_poll, info, trace, Error, Event, SocketInput,
-    SocketOutput, DEFAULT_BACKOFF_MAX, DEFAULT_BACKOFF_MIN, DEFAULT_MAX_RETRIES,
+    debug, error, event::map_poll, info, trace, Error, Event, SocketInput, SocketOutput, State,
+    DEFAULT_BACKOFF_MAX, DEFAULT_BACKOFF_MIN, DEFAULT_MAX_RETRIES,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +78,10 @@ impl Iterator for NextPollIter {
     }
 }
 
+/// A wrapper around [`WebSocket`] that reconnects when the socket
+/// drops. Uses [`Backoff`] to determine the delay between reconnects
+///
+/// See the [`crate`] documentation for usage and examples
 pub struct Socket<I, O> {
     pub(crate) url: String,
     pub(crate) sender: UnboundedSender<I>,
@@ -146,23 +150,31 @@ where
     <Message as TryFrom<I>>::Error: Debug,
     <O as TryFrom<Message>>::Error: Debug,
 {
+    /// Send the given `message` for sending
+    ///
+    /// Internally it is added to a channel which is polled by the [`Stream`] implementation
+    /// when the underlying [`WebSocket`] is open and ready to transmit it
     pub async fn send(&mut self, message: I) -> Result<(), TrySendError<I>> {
         self.sender.unbounded_send(message)
     }
 
+    /// Get a sender handle to the message channel
     pub fn get_sender(&self) -> UnboundedSender<I> {
         self.sender.clone()
     }
 
     /// Close the inner socket with the given `code` and `reason`
-    /// 
+    ///
+    /// The socket will try and reconnect after a timeout if there are sufficient retries remaining
+    ///
     /// This is mainly an implementation detail but it's exposed so it can be used in test code
     /// to force a reconnect. If used in this way it's worth noting that the Closing/Closed state
     /// events won't be emitted
     pub fn close_socket(&mut self, code: Option<u16>, reason: Option<&str>) {
-        // Take and drop the socket        
+        // Take and drop the socket
         if let Some(socket) = self.socket.take() {
-            // Attempt to send the close but don't fail if it can't be sent (the socket could be dead already)
+            // Attempt to send the close but don't fail if it can't be sent (the socket could be
+            // dead already)
             let _ = socket.close(code, reason);
         }
 
@@ -170,11 +182,7 @@ where
         self.state = State::Closed;
 
         if let Some(timeout) = self.backoff.next(self.retry) {
-            debug!(
-                "Backoff retry: {}, timeout: {:.3}s",
-                self.retry,
-                timeout.as_secs_f32()
-            );
+            debug!("Backoff retry: {}, timeout: {:.3}s", self.retry, timeout.as_secs_f32());
             let millis = timeout.as_millis() as u32;
             self.timeout = stream::once(TimeoutFuture::new(millis)).fuse();
         } else {
@@ -184,10 +192,12 @@ where
         }
     }
 
-    pub fn close(&mut self) {
+    /// Permanently close the reconnecting socket. No further reconnects will be possible
+    ///
+    /// The socket implements [`FusedStream`] so polling it after close won't panic
+    pub fn close(&mut self, code: Option<u16>, reason: Option<&str>) {
         self.closed = true;
-        // Drop the socket if we have one
-        self.socket = None;
+        let _ = self.close_socket(code, reason);
     }
 
     fn map_socket_output(
@@ -267,7 +277,7 @@ where
 
                 if self.retry > self.max_retries {
                     error!("retries exceeded. Closing");
-                    self.close();
+                    self.close(None, None);
                     return Poll::Ready(None);
                 }
 
@@ -290,13 +300,16 @@ where
             }
 
             let next_poll_iter = if self.state == State::Open {
-                // If the socket is established we need to poll each future in turn even if we return in between
-                // If we return Pending before polling each future, we won't get woken when the unpolled future wakes
+                // If the socket is established we need to poll each future in turn even if we
+                // return in between If we return Pending before polling each
+                // future, we won't get woken when the unpolled future wakes
                 self.next_poll.into_iter()
             } else {
-                // If the socket is not established, we want to poll the socket first and if it is still !Open skip polling the
-                // incomming message channel since there is nothing we can do with any messages we unqueue from there at this point.
-                // The socket has extra waker logic to make sure it wakes up after the socket opens even though it doesn't produce any values at that point
+                // If the socket is not established, we want to poll the socket first and if it is
+                // still !Open skip polling the incomming message channel since
+                // there is nothing we can do with any messages we unqueue from there at this point.
+                // The socket has extra waker logic to make sure it wakes up after the socket opens
+                // even though it doesn't produce any values at that point
                 // so we'll also get woken up and go back to normal polling logic
                 NextPoll::Socket.into_iter()
             };
@@ -336,16 +349,20 @@ where
                     },
 
                     Channel => {
-                        // Get the value directly from socket here because plausibly this could be the 2nd poll of the loop
-                        // and it could have updated in between 
-                        
+                        // Get the value directly from socket here because plausibly this could be
+                        // the 2nd poll of the loop and it could have
+                        // updated in between
+
                         // Unwrap ok because we assigned it above if one didn't exist
                         if State::Open != self.socket.as_mut().unwrap().state().into() {
-                            // Don't take anything off the incomming message channel if the socket isn't open because messages sent to 
+                            // Don't take anything off the incomming message channel if the socket
+                            // isn't open because messages sent to
                             // WebSocket when it's not yet open are lost
 
-                            // Don't poll the channel because the next time we want to be woken is when the socket is established, 
-                            // there's no point being woken if the consumer keeps adding data to the channel
+                            // Don't poll the channel because the next time we want to be woken is
+                            // when the socket is established,
+                            // there's no point being woken if the consumer keeps adding data to the
+                            // channel
                             trace!("socket not open, skipping channel poll");
                             continue;
                         }
@@ -361,7 +378,7 @@ where
                                     },
                                     Ok(payload) => payload,
                                 };
-                                
+
                                 // Unwrap ok because we assigned it above if one didn't exist
                                 let socket = self.socket.as_mut().unwrap();
 
@@ -373,7 +390,7 @@ where
                                 }
                             } else {
                                 info!("Input channel closed. Closing");
-                                self.close();
+                                self.close(None, None);
                                 return Poll::Ready(None);
                             }
                         }

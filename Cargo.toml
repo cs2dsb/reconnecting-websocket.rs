@@ -1,8 +1,16 @@
 [package]
 name = "reconnecting-websocket"
+description = "A wrapper around gloo::net::websocket::futures::WebSocket that reconnects when the socket drops. Uses exponential-backoff::Backoff to determine the delay between reconnects"
+authors = [ "daniel_ <cs2dsb@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+homepage = "https://github.com/cs2dsb/reconnecting-websocket.rs"
+repository = "https://github.com/cs2dsb/reconnecting-websocket.rs"
+keywords = [ "websocket", "wasm"]
+categories = ["asynchronous", "network-programming", "wasm", "web-programming::websocket"]
+documentation = "https://docs.rs/reconnecting-websocket"
+readme = "./README.md"
 
 [features]
 default = [ "tracing", "state-events" ]

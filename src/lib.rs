@@ -21,17 +21,17 @@
 //! 1. Both input and output need to implement [`Unpin`] and, if using tracing feature, [`Debug`]
 //! 1. Use [`SocketBuilder`] to set the URL and configure backoff. [`get_proto_and_host`] can help
 //!    constructing the URL relative to the current `window.location`
-//! 1. Call [`SocketBuilder::open`] to connect the socket. The errors `open` return are likely fatal
-//!    (invalid URL, blocked port), see [`WebSocket::open`] for details. The first connect is done
-//!    in the builder so it fails fast if these fatal errors occur but the same kind of error can
-//!    also occur on any reconnect and be returned by the [`Socket`] [`Stream`] implementation
+//! 1. Call [`SocketBuilder::open`] to connect the socket. The errors `open` returns are likely
+//!    fatal (invalid URL, blocked port), see [`WebSocket::open`] for details. The first connect is
+//!    done in the builder so it fails fast if these fatal errors occur but the same kind of error
+//!    can also occur on any reconnect and be returned by the [`Socket`] [`Stream`] implementation
 //! 1. The returned [`Socket`] can then be polled to get incoming messages. [`Socket::send`] can be
 //!    called to send messages or [`Socket::get_sender`] can be used to get an [`UnboundedSender`].
 //!    [`Socket::close`] or dropping it will drop the inner [`WebSocket`] which sends a close frame
 //!    and cleans up the event handlers
-//! 
+//!
 //! # Example
-//! 
+//!
 //! `tests/reconnect.rs`
 //! ```rust
 #![doc = include_str!("../tests/reconnect.rs")]
@@ -45,10 +45,7 @@
 
 // TODO: Replace unbounded with a reasonable bounded channel
 
-// #![warn(missing_docs)]
-
-// Allows the blanket implementation of SocketInput and SocketOutput
-#![allow(private_bounds)]
+#![warn(missing_docs)]
 
 use std::fmt::Debug;
 
@@ -84,13 +81,19 @@ cfg_if! {
         #[allow(unused_imports)]
         use tracing::{trace, debug, info, warn, error};
 
-        trait SocketInput: Unpin + Debug + Sized
+        /// Trait expressing the requirements for a socket input type
+        /// You don't need to implement it directly, there is a blanked implementation for types that implement
+        /// [`Unpin`], [`Debug`], <[`Message`] as [`TryFrom<Self>`]>
+        pub trait SocketInput: Unpin + Debug + Sized
         where
             Message: TryFrom<Self>,
             <Message as TryFrom<Self>>::Error: Debug
         {}
 
-        trait SocketOutput: Unpin + TryFrom<Message> + Debug
+        /// Trait expressing the requirements for a socket output type
+        /// You don't need to implement it directly, there is a blanked implementation for types that implement
+        /// [`Unpin`], [`Debug`], <`Self` as [`TryFrom<Message>`]>
+        pub trait SocketOutput: Unpin + TryFrom<Message> + Debug
         where <Self as TryFrom<Message>>::Error: Debug {}
 
         impl<T: Unpin + Debug + Sized> SocketInput for T
@@ -104,13 +107,13 @@ cfg_if! {
     } else {
         mod dummy_tracing;
 
-        trait SocketInput: Unpin + Sized
+        pub trait SocketInput: Unpin + Sized
         where
             Message: TryFrom<Self>,
             <Message as TryFrom<Self>>::Error: Debug
         {}
 
-        trait SocketOutput: Unpin + TryFrom<Message>
+        pub trait SocketOutput: Unpin + TryFrom<Message>
         where <Self as TryFrom<Message>>::Error: Debug {}
 
         impl<T: Unpin + Sized> SocketInput for T

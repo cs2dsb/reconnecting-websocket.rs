@@ -7,6 +7,7 @@ use gloo::{
 
 use crate::{error, SocketInput, SocketOutput};
 
+/// Errors returned by this crate
 #[derive(Debug, thiserror::Error)]
 pub enum Error<I, O>
 where
@@ -16,18 +17,25 @@ where
     <Message as TryFrom<I>>::Error: Debug,
     <O as TryFrom<Message>>::Error: Debug,
 {
+    /// Errors from the underlying [`gloo::net::websocket::futures::WebSocket`]
     #[error("WebSocketError: {0}")]
     WebSocketError(WebSocketError),
 
+    /// Javascript errors returned by either [`crate::get_proto_and_host`] or the underlying
+    /// [`gloo::net::websocket::futures::WebSocket`]
     #[error("JsError: {0}")]
     JsError(#[from] JsError),
 
+    /// Invalid configuration provided to [`crate::SocketBuilder`]
     #[error("InvalidConfig: {0}")]
     InvalidConfig(String),
 
-    #[error("Input TryInto<Message> Err: {0:?}")]
+    /// Input errors returned by the consumers implementation of <[`crate::Message`] as
+    /// [`TryFrom<I>`]>
+    #[error("Input TryFrom(Message) Err: {0:?}")]
     InputError(<Message as TryFrom<I>>::Error),
 
+    /// Output errors returned by the consumers implementation of <O as [`TryFrom<Message>`]>
     #[error("Output TryFrom<Message> Err: {0:?}")]
     OutputError(<O as TryFrom<Message>>::Error),
 }

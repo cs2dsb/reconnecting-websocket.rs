@@ -8,6 +8,8 @@ use crate::{
     DEFAULT_MAX_RETRIES,
 };
 
+/// Builder for [`Socket`]
+/// Uses the DEFAULT_* consts for backoff and retry config
 #[derive(Debug)]
 pub struct SocketBuilder<I, O> {
     url: String,
@@ -25,6 +27,7 @@ where
     <Message as TryFrom<I>>::Error: Debug,
     <O as TryFrom<Message>>::Error: Debug,
 {
+    /// Create a new builder from the given url with other config set to defaults
     pub fn new(url: String) -> Self {
         Self {
             url,
@@ -35,30 +38,35 @@ where
         }
     }
 
+    /// Update the builder url
     pub fn set_url(mut self, url: String) -> Self {
         self.url = url;
         self
     }
 
+    /// Update the minimum backoff duration (must be > 0 millis)
     pub fn set_backoff_min(mut self, backoff_min: Duration) -> Self {
         self.backoff_min = backoff_min;
         self
     }
 
+    /// Update the maximum backoff duration (if set must be < u32::MAX millis)
     pub fn set_backoff_max(mut self, backoff_max: Option<Duration>) -> Self {
         self.backoff_max = backoff_max;
         self
     }
 
+    /// Update the maximum number of retry attempts
     pub fn set_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
         self
     }
 
     /// Attempts to create a reconnecting websocket and do the initial open
-    /// It's set up this way because the kind of errors that can occur here are likely fatal (See
-    /// [`gloo::net::websocket::futures::WebSocket::open`] for details) These could be panics but
-    /// the consumer may want to display the error to the user or fallback to plain http
+    /// It's set up to error at this poing because the kind of errors that can occur here are likely
+    /// fatal (See [`gloo::net::websocket::futures::WebSocket::open`] for details). These could
+    /// be panics but the consumer may want to display the error to the user or fallback to
+    /// plain http
     pub fn open(self) -> Result<Socket<I, O>, Error<I, O>> {
         let SocketBuilder { url, backoff_min, backoff_max, max_retries, .. } = self;
 

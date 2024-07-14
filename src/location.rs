@@ -6,9 +6,12 @@ use web_sys::{
     window,
 };
 
+/// The protocol extracted from `window.location`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpProtocol {
+    /// Insecure http
     Http,
+    /// Secure https
     Https,
 }
 
@@ -32,9 +35,12 @@ impl Into<WebSocketProtocol> for HttpProtocol {
     }
 }
 
+/// A websocket protocol
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebSocketProtocol {
+    /// Insecure websocket
     Ws,
+    /// Secure websocket
     Wss,
 }
 
@@ -48,6 +54,7 @@ impl ToString for WebSocketProtocol {
     }
 }
 
+/// Helper function to get the protocol and host from `window.location`
 pub fn get_proto_and_host() -> Result<(HttpProtocol, String), JsError> {
     let location =
         window().ok_or(JsSysError::from(ReferenceError::new("window global was none")))?.location();
