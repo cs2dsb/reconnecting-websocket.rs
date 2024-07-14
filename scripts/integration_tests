@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# Exit when any command fails
+set -o errexit
+
+# Exit when an undeclared variable is used
+set -o nounset
+
+# Exit when a piped command returns a non-zero exit code
+set -o pipefail
+
+# Runs crate tests using wasm-pack
+
+readonly RED='\033[0;31m';
+readonly NC='\033[0m'; # No Color
+
+warn() { echo -e "${RED}$@${NC}" >&2; }
+die() { warn "$@"; exit 1; }
+
+readonly repo_dir="$( cd $(dirname ${BASH_SOURCE}); cd ..; pwd )";
+cd $repo_dir
+
+headless="--headless"
+if [ "${1:-}" == "debug" ]; then 
+    headless=""
+fi
+
+wasm-pack -V >/dev/null 2>&1 || die "wasm-pack required (cargo install wasm-pack)"
+
+wasm-pack test --firefox $headless --no-default-features --features tracing
+wasm-pack test --firefox $headless --no-default-features --features tracing,state-events
