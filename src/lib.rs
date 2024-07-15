@@ -73,7 +73,7 @@ mod state;
 pub use state::State;
 
 mod socket;
-pub use socket::Socket;
+pub use socket::{ Socket, SocketSink };
 
 // Plumbing for making it work with and without tracing
 cfg_if! {
