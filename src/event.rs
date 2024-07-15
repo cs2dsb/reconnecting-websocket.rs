@@ -62,6 +62,19 @@ cfg_if! {
         {
             poll.map(|option| option.map(|result| Event::<_, _>::from(result)))
         }
+
+        pub(crate) fn map_err<I, O>(
+            e: Error<I, O>,
+        ) -> Poll<Option<Event<I, O>>>
+        where
+            I: SocketInput,
+            O: SocketOutput,
+            Message: TryFrom<I>,
+            <Message as TryFrom<I>>::Error: Debug,
+            <O as TryFrom<Message>>::Error: Debug,
+        {
+            Poll::Ready(Some(Event::<_, _>::from(Err(e))))
+        }
 } else {
         /// [`futures::Stream::Item`] type for [`Socket`] when `state-events` feature is not enabled
         pub type Event<I, O> = Result<O, Error<I, O>>;
@@ -78,6 +91,19 @@ cfg_if! {
             <O as TryFrom<Message>>::Error: Debug,
         {
             poll
+        }
+
+        pub(crate) fn map_err<I, O>(
+            e: Error<I, O>,
+        ) -> Poll<Option<Event<I, O>>>
+        where
+            I: SocketInput,
+            O: SocketOutput,
+            Message: TryFrom<I>,
+            <Message as TryFrom<I>>::Error: Debug,
+            <O as TryFrom<Message>>::Error: Debug,
+        {
+            Poll::Ready(Some(Err(e)))
         }
     }
 }

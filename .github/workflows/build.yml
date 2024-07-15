@@ -106,7 +106,8 @@ jobs:
             ./scripts/integration_tests
             cargo doc \
                 --release \
-                --all-features
+                --all-features \
+                --document-private-items
             echo '<meta http-equiv="refresh" content="0;url=reconnecting_websocket/index.html">' \
                 | tee target/doc/index.html
             rm target/doc/.lock
