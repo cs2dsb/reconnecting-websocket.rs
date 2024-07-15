@@ -16,9 +16,9 @@ drops. Uses [`Backoff`] to determine the delay between reconnects
 
 ## Usage
 
-Input means stuff you want to send from this client to the server
+Input means stuff you want to send from this client to the server (Sink)
 
-Outut means stuff you want to receive back from the server
+Outut means stuff you want to receive back from the server (Source)
 
 1. Implement [`TryFrom`] for [`Message`] for your input type
     * The [`TryFrom::Error`] type must implement [`Debug`]
