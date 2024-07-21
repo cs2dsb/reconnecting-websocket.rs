@@ -20,6 +20,7 @@ use gloo::{
 };
 
 use crate::{
+    constants::DEFAULT_STABLE_CONNECTION_TIMEOUT,
     debug, error,
     event::{map_err, map_poll},
     info, trace, Error, Event, SocketInput, SocketOutput, State, DEFAULT_BACKOFF_MAX,
@@ -143,23 +144,27 @@ pub struct Socket<I, O> {
     /// A queued message that needs to be sent as soon as the socket is [`State::Open`] This
     /// happens when the inner socket exists but hasn't yet fully connected. When in this
     /// state the [`WebSocket`] [`Sink`] implementation returns [`Poll::Pending`]. Since we
-    /// can't reliably know that with any certainty until we've already created the 
-    /// [`Message`] from the input channel and called [`Sink::poll_ready`]. Calling 
+    /// can't reliably know that with any certainty until we've already created the
+    /// [`Message`] from the input channel and called [`Sink::poll_ready`]. Calling
     /// [`Sink::poll_ready`] before creating the [`Message`] isn't really an option because we
-    ///  have no way of undoing anything the Sink does to prepare a slot for us to send to - 
-    /// in this specific case, [`WebSocket`] doesn't actually do anything that needs to be 
-    /// reversed but we can't rely on that always being the case. See 
-    /// <https://github.com/rust-lang/futures-rs/issues/2109> for a discussion about this 
-    /// problem. So what we do is take the [`Message`] but don't try and send it directly, 
+    ///  have no way of undoing anything the Sink does to prepare a slot for us to send to -
+    /// in this specific case, [`WebSocket`] doesn't actually do anything that needs to be
+    /// reversed but we can't rely on that always being the case. See
+    /// <https://github.com/rust-lang/futures-rs/issues/2109> for a discussion about this
+    /// problem. So what we do is take the [`Message`] but don't try and send it directly,
     /// instead calling [`Sink::poll_ready`] and only sending it if this returns [`Poll::Ready`]
     pub(crate) queued_message: Option<Message>,
     pub(crate) state: State,
     pub(crate) backoff: Backoff,
     pub(crate) max_retries: u32,
     pub(crate) retry: u32,
+    /// When socket.is_none this is a reconnect timeout
+    /// When socket.is_some this is a connection stable after retry timeout
     pub(crate) timeout: Fuse<stream::Once<TimeoutFuture>>,
     pub(crate) next_poll: NextPoll,
     pub(crate) closed: bool,
+    /// How long to wait after reconnecting before resetting retries to 0
+    pub(crate) stable_timeout_millis: u32,
     pub(crate) _phantom: PhantomData<(I, O)>,
 }
 
@@ -186,6 +191,7 @@ where
             timeout: stream::once(TimeoutFuture::new(0)).fuse(),
             next_poll: NextPoll::Socket,
             closed: false,
+            stable_timeout_millis: DEFAULT_STABLE_CONNECTION_TIMEOUT.as_millis() as u32,
             _phantom: PhantomData,
         }
     }
@@ -342,6 +348,12 @@ where
                     #[cfg(feature = "state-events")]
                     return Poll::Ready(Some(self.state.into()));
                 }
+
+                // Check if the connection has become stable
+                if self.retry > 0 && Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                    trace!("connection is stable. Resetting retries ({} -> 0)", self.retry);
+                    self.retry = 0;
+                }
             } else {
                 trace!("socket is none");
                 ready!(Pin::new(&mut self.timeout).poll_next(cx));
@@ -358,12 +370,18 @@ where
                     Ok(v) => self.socket = Some(v),
                     Err(e) => {
                         error!("WebSocket::open err: {e:?}");
+                        // Reset the connection and set the next retry timeout (although this kind
+                        // of error is likely fatal)
+                        self.close_socket(None, None);
                         return map_err(e);
                     },
                 }
 
                 // Update our state
                 self.state = State::Connecting;
+
+                // Set the stable timeout
+                self.timeout = stream::once(TimeoutFuture::new(self.stable_timeout_millis)).fuse();
 
                 // Announce it if state events are turned on
                 #[cfg(feature = "state-events")]
