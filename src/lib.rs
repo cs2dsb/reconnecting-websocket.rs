@@ -75,6 +75,8 @@ pub use state::State;
 mod socket;
 pub use socket::{Socket, SocketSink};
 
+mod dummy_tracing;
+
 // Plumbing for making it work with and without tracing
 cfg_if! {
     if #[cfg(feature = "tracing")] {
@@ -105,14 +107,18 @@ cfg_if! {
         impl<T: Unpin + TryFrom<Message> + Debug> SocketOutput for T
         where <T as TryFrom<Message>>::Error: Debug {}
     } else {
-        mod dummy_tracing;
-
+        /// Trait expressing the requirements for a socket input type
+        /// You don't need to implement it directly, there is a blanked implementation for types that implement
+        /// [`Unpin`], [`Debug`], <[`Message`] as [`TryFrom<Self>`]>
         pub trait SocketInput: Unpin + Sized
         where
             Message: TryFrom<Self>,
             <Message as TryFrom<Self>>::Error: Debug
         {}
 
+        /// Trait expressing the requirements for a socket output type
+        /// You don't need to implement it directly, there is a blanked implementation for types that implement
+        /// [`Unpin`], [`Debug`], <`Self` as [`TryFrom<Message>`]>
         pub trait SocketOutput: Unpin + TryFrom<Message>
         where <Self as TryFrom<Message>>::Error: Debug {}
 
